@@ -31,6 +31,7 @@ import com.vanegasazucena.appministrator.ui.components.ConfirmActionDialog
 import com.vanegasazucena.appministrator.ui.components.FilterDialog
 import com.vanegasazucena.appministrator.ui.components.SearchEncomiendaDialog
 import com.vanegasazucena.appministrator.ui.components.SearchUserDialog
+import com.vanegasazucena.appministrator.ui.screens.AuditLogScreen
 import com.vanegasazucena.appministrator.ui.screens.DashboardScreen
 import com.vanegasazucena.appministrator.ui.screens.EncomiendaFormScreen
 import com.vanegasazucena.appministrator.ui.screens.EncomiendaListScreen
@@ -42,7 +43,7 @@ import com.vanegasazucena.appministrator.ui.theme.WinePrimary
 import com.vanegasazucena.appministrator.ui.viewmodel.AppViewModel
 
 enum class ScreenState {
-    INICIO, ENCOMIENDAS_LISTA, CREAR_ENCOMIENDA, EDITAR_ENCOMIENDA, CREAR_USUARIO, EDITAR_USUARIO, USUARIOS_LISTA
+    INICIO, ENCOMIENDAS_LISTA, CREAR_ENCOMIENDA, EDITAR_ENCOMIENDA, CREAR_USUARIO, EDITAR_USUARIO, USUARIOS_LISTA, LOGS_AUDITORIA
 }
 
 @Composable
@@ -78,7 +79,7 @@ private fun MainContent(
     var showSearchUserDialog by remember { mutableStateOf(value = false) }
     var showExitDialog by remember { mutableStateOf(value = false) }
 
-    var adminTabSelection by remember { mutableIntStateOf(0) } // 0 = Dashboard/List, 1 = Usuarios
+    var adminTabSelection by remember { mutableIntStateOf(0) } // 0 = Dashboard/List, 1 = Usuarios, 2 = Auditoría
 
     Scaffold(
         bottomBar = {
@@ -142,7 +143,7 @@ private fun MainContent(
                                 Text(
                                     text = "Dashboard",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
+                                    fontSize = 13.sp
                                 )
                             }
                         )
@@ -153,10 +154,23 @@ private fun MainContent(
                                 Text(
                                     text = if (isAdmin) "Usuarios" else "Encomiendas",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
+                                    fontSize = 13.sp
                                 )
                             }
                         )
+                        if (isAdmin) {
+                            Tab(
+                                selected = adminTabSelection == 2,
+                                onClick = { adminTabSelection = 2 },
+                                text = {
+                                    Text(
+                                        text = "Auditoría / Logs",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                            )
+                        }
                     }
                 }
 
@@ -171,6 +185,8 @@ private fun MainContent(
                                     currentScreen = ScreenState.EDITAR_USUARIO
                                 }
                             )
+                        } else if (isAdmin && adminTabSelection == 2) {
+                            AuditLogScreen(viewModel = viewModel)
                         } else if (!isAdmin && adminTabSelection == 1) {
                             EncomiendaListScreen(
                                 viewModel = viewModel,
@@ -252,6 +268,10 @@ private fun MainContent(
                                 selectedTab = BottomTab.INICIO
                             }
                         )
+                    }
+
+                    ScreenState.LOGS_AUDITORIA -> {
+                        AuditLogScreen(viewModel = viewModel)
                     }
                 }
             }

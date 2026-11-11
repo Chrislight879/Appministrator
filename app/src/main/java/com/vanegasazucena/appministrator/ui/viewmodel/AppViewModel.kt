@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.vanegasazucena.appministrator.data.local.AppDatabase
+import com.vanegasazucena.appministrator.data.local.AuditLogEntity
 import com.vanegasazucena.appministrator.data.local.EncomiendaEntity
 import com.vanegasazucena.appministrator.data.local.UserEntity
 import com.vanegasazucena.appministrator.data.repository.AppRepository
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -31,25 +33,50 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val activeUserSearchQuery = MutableStateFlow<String?>(null)
     val activeUserSearchCriteria = MutableStateFlow<SearchUserCriteria?>(null)
 
+    val activeLogSearchQuery = MutableStateFlow("")
+
     private val rawEncomiendas: StateFlow<List<EncomiendaEntity>>
     val filteredEncomiendas: StateFlow<List<EncomiendaEntity>>
 
     private val rawUsers: StateFlow<List<UserEntity>>
     val filteredUsers: StateFlow<List<UserEntity>>
 
+    val auditLogs: StateFlow<List<AuditLogEntity>>
+    val filteredAuditLogs: StateFlow<List<AuditLogEntity>>
+
     init {
         val database = AppDatabase.getDatabase(application)
-        repository = AppRepository(database.userDao(), database.encomiendaDao())
+        repository = AppRepository(database.userDao(), database.encomiendaDao(), database.auditLogDao())
 
         viewModelScope.launch(Dispatchers.IO) {
             repository.ensureInitialData()
         }
 
         rawEncomiendas = repository.getAllEncomiendas()
-            .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
         rawUsers = repository.getAllUsers()
-            .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+        auditLogs = repository.getAllLogs()
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+        filteredAuditLogs = combine(
+            auditLogs,
+            activeLogSearchQuery
+        ) { logs, query ->
+            if (query.isBlank()) {
+                logs
+            } else {
+                val q = query.trim().lowercase()
+                logs.filter { log ->
+                    log.fechaHora.lowercase().contains(q) ||
+                            log.encomiendaId.lowercase().contains(q) ||
+                            log.usuario.lowercase().contains(q) ||
+                            log.accion.lowercase().contains(q)
+                }
+            }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
         filteredEncomiendas = combine(
             rawEncomiendas,
@@ -85,7 +112,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             result
-        }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
         filteredUsers = combine(
             rawUsers,
@@ -106,7 +133,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             result
-        }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    }
+
+    fun setLogSearchQuery(query: String) {
+        activeLogSearchQuery.value = query
     }
 
     fun login(username: String, password: String, onResult: (Boolean, String?) -> Unit) {
@@ -126,6 +157,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         activeFilter.value = null
         activeSearchQuery.value = null
         activeSearchCriteria.value = null
+        activeLogSearchQuery.value = ""
     }
 
     fun saveEncomienda(
@@ -140,9 +172,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         fecha: String,
         onComplete: () -> Unit
     ) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val creator = currentUser.value?.username ?: "PeterParker"
             val actualId = if (!id.isNullOrEmpty()) id else repository.generateNextEncomiendaCode()
+            val existing = repository.getEncomiendaById(actualId)
 
             val entity = EncomiendaEntity(
                 id = actualId,
@@ -150,7 +183,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 emisorDui = emisorDui,
                 remitenteNombre = remitenteNombre,
                 remitenteDui = remitenteDui,
-                creadoPor = creator,
+                creadoPor = if (existing != null) existing.creadoPor else creator,
                 codigo = actualId,
                 estado = estado,
                 tamano = tamano,
@@ -158,29 +191,84 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 fecha = fecha
             )
             repository.insertEncomienda(entity)
-            onComplete()
+
+            // Direct Insert to Audit Log DB
+            if (existing == null) {
+                repository.insertLog(
+                    encomiendaId = actualId,
+                    accion = "CREACIÓN",
+                    usuario = creator,
+                    detalles = "Nueva encomienda creada para $remitenteNombre. Estado: $estado, Tamaño: $tamano, Total: $$precio"
+                )
+            } else {
+                val changes = mutableListOf<String>()
+                if (!existing.estado.equals(estado, ignoreCase = true)) changes.add("Estado (${existing.estado} -> $estado)")
+                if (!existing.tamano.equals(tamano, ignoreCase = true)) changes.add("Tamaño (${existing.tamano} -> $tamano)")
+                if (existing.precio != precio) changes.add("Precio ($${existing.precio} -> $$precio)")
+                if (existing.remitenteNombre != remitenteNombre) changes.add("Destinatario (${existing.remitenteNombre} -> $remitenteNombre)")
+                if (existing.emisorNombre != emisorNombre) changes.add("Emisor (${existing.emisorNombre} -> $emisorNombre)")
+
+                val detailsText = if (changes.isNotEmpty()) changes.joinToString(", ") else "Se actualizaron los datos de la encomienda"
+                repository.insertLog(
+                    encomiendaId = actualId,
+                    accion = "ACTUALIZACIÓN",
+                    usuario = creator,
+                    detalles = detailsText
+                )
+            }
+
+            withContext(Dispatchers.Main) {
+                onComplete()
+            }
         }
     }
 
     fun deleteEncomienda(encomienda: EncomiendaEntity, onComplete: () -> Unit) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
+            val creator = currentUser.value?.username ?: "admin"
             repository.deleteEncomienda(encomienda)
-            onComplete()
+            repository.insertLog(
+                encomiendaId = encomienda.id,
+                accion = "ELIMINACIÓN",
+                usuario = creator,
+                detalles = "Encomienda ${encomienda.id} eliminada por $creator"
+            )
+            withContext(Dispatchers.Main) {
+                onComplete()
+            }
         }
     }
 
     fun saveUser(username: String, password: String, role: String, onComplete: () -> Unit) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
+            val creator = currentUser.value?.username ?: "admin"
             val user = UserEntity(username = username, password = password, role = role)
             repository.insertUser(user)
-            onComplete()
+            repository.insertLog(
+                encomiendaId = "USUARIO: $username",
+                accion = "CREACIÓN USUARIO",
+                usuario = creator,
+                detalles = "Usuario $username registrado con rol $role"
+            )
+            withContext(Dispatchers.Main) {
+                onComplete()
+            }
         }
     }
 
     fun deleteUser(username: String, onComplete: () -> Unit) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
+            val creator = currentUser.value?.username ?: "admin"
             repository.deleteUser(username)
-            onComplete()
+            repository.insertLog(
+                encomiendaId = "USUARIO: $username",
+                accion = "ELIMINACIÓN USUARIO",
+                usuario = creator,
+                detalles = "Usuario $username eliminado del sistema"
+            )
+            withContext(Dispatchers.Main) {
+                onComplete()
+            }
         }
     }
 
