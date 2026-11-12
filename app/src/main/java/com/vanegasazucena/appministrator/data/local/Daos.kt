@@ -46,15 +46,18 @@ interface EncomiendaDao {
     @Delete
     suspend fun deleteEncomienda(encomienda: EncomiendaEntity): Int
 
+    @Query("SELECT codigo FROM encomiendas")
+    suspend fun getAllCodigos(): List<String>
+
+    @Query("SELECT * FROM encomiendas WHERE codigo = id OR codigo = '' OR codigo IS NULL")
+    suspend fun getEncomiendasConCodigoAnterior(): List<EncomiendaEntity>
+
+    @Query("UPDATE encomiendas SET codigo = :codigo WHERE id = :id")
+    suspend fun actualizarCodigo(id: String, codigo: String): Int
+
     @Query("SELECT COUNT(*) FROM encomiendas")
     suspend fun getCount(): Int
-}
 
-@Dao
-interface AuditLogDao {
-    @Query("SELECT * FROM audit_logs ORDER BY id DESC")
-    fun getAllLogs(): Flow<List<AuditLogEntity>>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertLog(log: AuditLogEntity): Long
+    @Query("SELECT MAX(CAST(SUBSTR(id, 5) AS INTEGER)) FROM encomiendas WHERE id LIKE 'ENC-%'")
+    suspend fun getMaxIdNumber(): Int?
 }
