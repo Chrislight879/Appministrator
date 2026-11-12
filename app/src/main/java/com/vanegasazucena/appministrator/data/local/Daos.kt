@@ -61,3 +61,12 @@ interface EncomiendaDao {
     @Query("SELECT MAX(CAST(SUBSTR(id, 5) AS INTEGER)) FROM encomiendas WHERE id LIKE 'ENC-%'")
     suspend fun getMaxIdNumber(): Int?
 }
+
+@Dao
+interface AuditLogDao {
+    @Query("SELECT * FROM audit_logs ORDER BY id DESC")
+    fun getAllLogs(): Flow<List<AuditLogEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLog(log: AuditLogEntity): Long
+}

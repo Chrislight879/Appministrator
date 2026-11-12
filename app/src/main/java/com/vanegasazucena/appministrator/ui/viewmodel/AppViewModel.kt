@@ -1,6 +1,7 @@
 package com.vanegasazucena.appministrator.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.vanegasazucena.appministrator.data.local.AppDatabase
@@ -23,8 +24,11 @@ import kotlinx.coroutines.withContext
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: AppRepository
+    private val prefs = application.getSharedPreferences("app_session", Context.MODE_PRIVATE)
 
     val currentUser = MutableStateFlow<UserEntity?>(null)
+    /** true mientras se verifica si hay sesi├│n guardada */
+    val isCheckingSession = MutableStateFlow(true)
 
     val activeFilter = MutableStateFlow<FilterState?>(null)
     val activeSearchQuery = MutableStateFlow<String?>(null)
@@ -50,6 +54,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch(Dispatchers.IO) {
             repository.ensureInitialData()
+
+            // Restaurar sesi├│n guardada
+            val savedUsername = prefs.getString("logged_in_username", null)
+            if (savedUsername != null) {
+                val user = repository.getUserByUsername(savedUsername)
+                if (user != null) {
+                    currentUser.value = user
+                }
+            }
+            isCheckingSession.value = false
         }
 
         rawEncomiendas = repository.getAllEncomiendas()
@@ -145,15 +159,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val user = repository.login(username, password)
             if (user != null) {
                 currentUser.value = user
+                // Guardar sesi├│n en SharedPreferences
+                prefs.edit().putString("logged_in_username", user.username).apply()
                 onResult(true, null)
             } else {
-                onResult(false, "Usuario o contraseña incorrectos")
+                onResult(false, "Usuario o contrase├▒a incorrectos")
             }
         }
     }
 
     fun logout() {
         currentUser.value = null
+        // Limpiar sesi├│n guardada
+        prefs.edit().remove("logged_in_username").apply()
         activeFilter.value = null
         activeSearchQuery.value = null
         activeSearchCriteria.value = null
@@ -184,7 +202,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 remitenteNombre = remitenteNombre,
                 remitenteDui = remitenteDui,
                 creadoPor = if (existing != null) existing.creadoPor else creator,
-                codigo = existing?.codigo ?: "", // Se genera al guardar y se conserva al editar.
+                codigo = existing?.codigo ?: "",
                 estado = estado,
                 tamano = tamano,
                 precio = precio,
@@ -196,14 +214,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (existing == null) {
                 repository.insertLog(
                     encomiendaId = actualId,
-                    accion = "CREACIÓN",
+                    accion = "CREACI├ôN",
                     usuario = creator,
-                    detalles = "Nueva encomienda creada para $remitenteNombre. Estado: $estado, Tamaño: $tamano, Total: $$precio"
+                    detalles = "Nueva encomienda creada para $remitenteNombre. Estado: $estado, Tama├▒o: $tamano, Total: $$precio"
                 )
             } else {
                 val changes = mutableListOf<String>()
                 if (!existing.estado.equals(estado, ignoreCase = true)) changes.add("Estado (${existing.estado} -> $estado)")
-                if (!existing.tamano.equals(tamano, ignoreCase = true)) changes.add("Tamaño (${existing.tamano} -> $tamano)")
+                if (!existing.tamano.equals(tamano, ignoreCase = true)) changes.add("Tama├▒o (${existing.tamano} -> $tamano)")
                 if (existing.precio != precio) changes.add("Precio ($${existing.precio} -> $$precio)")
                 if (existing.remitenteNombre != remitenteNombre) changes.add("Destinatario (${existing.remitenteNombre} -> $remitenteNombre)")
                 if (existing.emisorNombre != emisorNombre) changes.add("Emisor (${existing.emisorNombre} -> $emisorNombre)")
@@ -211,7 +229,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val detailsText = if (changes.isNotEmpty()) changes.joinToString(", ") else "Se actualizaron los datos de la encomienda"
                 repository.insertLog(
                     encomiendaId = actualId,
-                    accion = "ACTUALIZACIÓN",
+                    accion = "ACTUALIZACI├ôN",
                     usuario = creator,
                     detalles = detailsText
                 )
@@ -229,7 +247,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             repository.deleteEncomienda(encomienda)
             repository.insertLog(
                 encomiendaId = encomienda.id,
-                accion = "ELIMINACIÓN",
+                accion = "ELIMINACI├ôN",
                 usuario = creator,
                 detalles = "Encomienda ${encomienda.id} eliminada por $creator"
             )
@@ -246,7 +264,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             repository.insertUser(user)
             repository.insertLog(
                 encomiendaId = "USUARIO: $username",
-                accion = "CREACIÓN USUARIO",
+                accion = "CREACI├ôN USUARIO",
                 usuario = creator,
                 detalles = "Usuario $username registrado con rol $role"
             )
@@ -262,7 +280,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             repository.deleteUser(username)
             repository.insertLog(
                 encomiendaId = "USUARIO: $username",
-                accion = "ELIMINACIÓN USUARIO",
+                accion = "ELIMINACI├ôN USUARIO",
                 usuario = creator,
                 detalles = "Usuario $username eliminado del sistema"
             )
