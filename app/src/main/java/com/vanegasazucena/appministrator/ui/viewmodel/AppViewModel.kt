@@ -1,6 +1,7 @@
 package com.vanegasazucena.appministrator.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.vanegasazucena.appministrator.data.local.AppDatabase
@@ -23,8 +24,11 @@ import kotlinx.coroutines.withContext
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: AppRepository
+    private val prefs = application.getSharedPreferences("app_session", Context.MODE_PRIVATE)
 
     val currentUser = MutableStateFlow<UserEntity?>(null)
+    /** true mientras se verifica si hay sesión guardada */
+    val isCheckingSession = MutableStateFlow(true)
 
     val activeFilter = MutableStateFlow<FilterState?>(null)
     val activeSearchQuery = MutableStateFlow<String?>(null)
@@ -50,6 +54,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch(Dispatchers.IO) {
             repository.ensureInitialData()
+
+            // Restaurar sesión guardada
+            val savedUsername = prefs.getString("logged_in_username", null)
+            if (savedUsername != null) {
+                val user = repository.getUserByUsername(savedUsername)
+                if (user != null) {
+                    currentUser.value = user
+                }
+            }
+            isCheckingSession.value = false
         }
 
         rawEncomiendas = repository.getAllEncomiendas()
@@ -145,6 +159,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val user = repository.login(username, password)
             if (user != null) {
                 currentUser.value = user
+                // Guardar sesión en SharedPreferences
+                prefs.edit().putString("logged_in_username", user.username).apply()
                 onResult(true, null)
             } else {
                 onResult(false, "Usuario o contraseña incorrectos")
@@ -154,6 +170,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun logout() {
         currentUser.value = null
+        // Limpiar sesión guardada
+        prefs.edit().remove("logged_in_username").apply()
         activeFilter.value = null
         activeSearchQuery.value = null
         activeSearchCriteria.value = null

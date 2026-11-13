@@ -49,3 +49,12 @@ interface EncomiendaDao {
     @Query("SELECT COUNT(*) FROM encomiendas")
     suspend fun getCount(): Int
 }
+
+@Dao
+interface AuditLogDao {
+    @Query("SELECT * FROM audit_logs ORDER BY id DESC")
+    fun getAllLogs(): Flow<List<AuditLogEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLog(log: AuditLogEntity): Long
+}

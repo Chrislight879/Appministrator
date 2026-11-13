@@ -25,3 +25,13 @@ data class EncomiendaEntity(
     val fecha: String,
     val timestampMillis: Long = System.currentTimeMillis()
 )
+
+@Entity(tableName = "audit_logs")
+data class AuditLogEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val encomiendaId: String,
+    val accion: String,
+    val usuario: String,
+    val detalles: String,
+    val fechaHora: String
+)

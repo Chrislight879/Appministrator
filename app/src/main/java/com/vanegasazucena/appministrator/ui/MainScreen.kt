@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -18,6 +19,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -49,15 +51,29 @@ enum class ScreenState {
 @Composable
 fun MainScreen(viewModel: AppViewModel) {
     val currentUser by viewModel.currentUser.collectAsState()
+    val isCheckingSession by viewModel.isCheckingSession.collectAsState()
 
-    val user = currentUser
-    if (user == null) {
-        LoginScreen(viewModel = viewModel) { }
-    } else {
-        MainContent(
-            viewModel = viewModel,
-            currentUser = user
-        )
+    when {
+        isCheckingSession -> {
+            // Pantalla de carga mientras se verifica la sesión guardada
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(BackgroundGray),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = WinePrimary)
+            }
+        }
+        currentUser == null -> {
+            LoginScreen(viewModel = viewModel) { }
+        }
+        else -> {
+            MainContent(
+                viewModel = viewModel,
+                currentUser = currentUser!!
+            )
+        }
     }
 }
 
@@ -285,9 +301,13 @@ private fun MainContent(
             onApply = { filterState ->
                 viewModel.setFilter(filterState)
                 showFilterDialog = false
+                selectedTab = BottomTab.INICIO
                 currentScreen = ScreenState.ENCOMIENDAS_LISTA
             },
-            onDismiss = { showFilterDialog = false }
+            onDismiss = {
+                showFilterDialog = false
+                selectedTab = BottomTab.INICIO
+            }
         )
     }
 
@@ -296,9 +316,13 @@ private fun MainContent(
             onSearch = { query, criteria ->
                 viewModel.setSearchEncomiendas(query, criteria)
                 showSearchEncomiendaDialog = false
+                selectedTab = BottomTab.INICIO
                 currentScreen = ScreenState.ENCOMIENDAS_LISTA
             },
-            onDismiss = { showSearchEncomiendaDialog = false }
+            onDismiss = {
+                showSearchEncomiendaDialog = false
+                selectedTab = BottomTab.INICIO
+            }
         )
     }
 
@@ -307,9 +331,13 @@ private fun MainContent(
             onSearch = { query, criteria ->
                 viewModel.setSearchUsers(query, criteria)
                 showSearchUserDialog = false
+                selectedTab = BottomTab.INICIO
                 currentScreen = ScreenState.USUARIOS_LISTA
             },
-            onDismiss = { showSearchUserDialog = false }
+            onDismiss = {
+                showSearchUserDialog = false
+                selectedTab = BottomTab.INICIO
+            }
         )
     }
 
@@ -321,7 +349,10 @@ private fun MainContent(
                 showExitDialog = false
                 viewModel.logout()
             },
-            onDismiss = { showExitDialog = false }
+            onDismiss = {
+                showExitDialog = false
+                selectedTab = BottomTab.INICIO
+            }
         )
     }
 }
