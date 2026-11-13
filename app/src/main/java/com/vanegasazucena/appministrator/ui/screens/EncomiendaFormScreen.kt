@@ -220,8 +220,15 @@ fun EncomiendaFormScreen(
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     FormLabelInput(
-                        label = "Codigo:",
-                        value = codigo,
+                        label = "ID:",
+                        value = existingEncomienda?.id ?: "Se asigna al guardar",
+                        enabled = false,
+                        onValueChange = { }
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    FormLabelInput(
+                        label = "Código único de retiro:",
+                        value = if (existingEncomienda == null) "Se genera al guardar" else codigo,
                         enabled = false, // Auto-generated code
                         onValueChange = { codigo = it }
                     )
