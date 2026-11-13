@@ -3,6 +3,7 @@ package com.vanegasazucena.appministrator.data.local
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.UUID
 import kotlin.random.Random
 
 object EncomiendaDataGenerator {
@@ -29,6 +30,7 @@ object EncomiendaDataGenerator {
 
         for (i in 1..300) {
             val code = "ENC-${String.format("%05d", i)}"
+            val codigoUnico = "REF-${UUID.randomUUID().toString().take(6).uppercase()}"
             val emisor = nombres[Random.nextInt(nombres.size)]
             val remitente = nombres[Random.nextInt(nombres.size)]
             val emisorDui = "${Random.nextInt(10000000, 99999999)}-${Random.nextInt(0, 9)}"
@@ -54,7 +56,7 @@ object EncomiendaDataGenerator {
                     remitenteNombre = remitente,
                     remitenteDui = remitenteDui,
                     creadoPor = creator,
-                    codigo = code,
+                    codigo = codigoUnico,
                     estado = estado,
                     tamano = tamano,
                     precio = String.format("%.2f", precio).toDouble(),
